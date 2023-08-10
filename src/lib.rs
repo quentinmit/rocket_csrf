@@ -166,8 +166,21 @@ trait RequestCsrf {
 
 impl RequestCsrf for Request<'_> {
     fn csrf_token_from_session(&self, config: &CsrfConfig) -> Option<Vec<u8>> {
-        self.cookies()
-            .get_private(&config.cookie_name)
-            .and_then(|cookie| base64::decode(cookie.value()).ok())
+        let cookies = self.cookies();
+        let pending_cookie = cookies.get_pending(&config.cookie_name);
+        // get_pending returns a request cookie's value whether it's encrypted
+        // or not, so we need to check to make sure the cookie really is
+        // pending.
+        let private_cookie = cookies.get_private(&config.cookie_name);
+        let public_cookie = cookies.get(&config.cookie_name);
+        // If pending == public, use private (means it needed to be decrypted).
+        // Else if pending is different from public, use pending (means we set a
+        // new cookie). If the request contains an invalid cookie, we can rely
+        // on the fairing to set a new pending cookie that doesn't match public.
+        if pending_cookie.as_ref().map(|c| c.value()) == public_cookie.as_ref().map(|c| c.value()) {
+            private_cookie
+        } else {
+            pending_cookie
+        }.and_then(|cookie| base64::decode(cookie.value()).ok())
     }
 }
