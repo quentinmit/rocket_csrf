@@ -75,18 +75,18 @@ impl<'r, T: FromForm<'r>> FromData<'r> for CsrfForm<T> {
         use rocket::outcome::Outcome::*;
         let token: CsrfToken = match r.guard().await {
             Success(t) => t,
-            Failure((s, _e)) => return Outcome::Failure((s, CsrfError::CSRFTokenInvalid)),
-            Forward(()) => return Outcome::Forward(d),
+            Error((s, _e)) => return Outcome::Error((s, CsrfError::CSRFTokenInvalid)),
+            Forward(s) => return Outcome::Forward((d, s)),
         };
         let form: Form<CsrfTokenForm<T>> = match Form::from_data(r, d).await {
             Success(t) => t,
-            Failure((s, e)) => return Outcome::Failure((s, CsrfError::Other(e))),
+            Error((s, e)) => return Outcome::Error((s, CsrfError::Other(e))),
             Forward(d) => return Outcome::Forward(d),
         };
         if token.verify(form.token).is_ok() {
             Outcome::Success(Self(form.into_inner().inner))
         } else {
-            Outcome::Failure((Status::NotAcceptable, CsrfError::CSRFTokenInvalid))
+            Outcome::Error((Status::NotAcceptable, CsrfError::CSRFTokenInvalid))
         }
     }
 }
